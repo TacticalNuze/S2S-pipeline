@@ -37,7 +37,7 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.cartesia.tts import CartesiaTTSService
 from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.openai.responses.llm import OpenAIResponsesLLMService
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.transports.daily.transport import DailyParams
 from pipecat.workers.runner import WorkerRunner
@@ -69,9 +69,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     )
 
     # LLM service
-    llm = OpenAIResponsesLLMService(
+    # Defaults to OpenAI; set OPENAI_BASE_URL to point at an OpenAI-compatible
+    # provider instead (e.g. https://openrouter.ai/api/v1 for OpenRouter), and
+    # OPENAI_MODEL to whatever model that provider expects.
+    llm = OpenAILLMService(
         api_key=os.getenv("OPENAI_API_KEY"),
-        settings=OpenAIResponsesLLMService.Settings(
+        base_url=os.getenv("OPENAI_BASE_URL") or None,
+        settings=OpenAILLMService.Settings(
             model=os.getenv("OPENAI_MODEL", "gpt-4.1"),
             system_instruction="You are a helpful assistant in a voice conversation. Your responses will be spoken aloud, so avoid emojis, bullet points, or other formatting that can't be spoken. Respond to what the user said in a creative, helpful, and brief way.",
         ),
