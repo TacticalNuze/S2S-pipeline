@@ -7,13 +7,13 @@ The LLM is any OpenAI-compatible endpoint, configured like pipecat-quickstart's 
     OPENAI_API_KEY=...
     OPENAI_BASE_URL=...      # optional, for non-OpenAI providers
     OPENAI_MODEL=gpt-4.1     # optional
-    HABIBI_DIALECT=MAR       # optional, see habibi_synth.DIALECTS
+    HABIBI_DIALECT=MAR       # optional, see DIALECTS in tts/habibi_synth.py
 
 One utterance, saving the reply:
-    uv run habibi_adapter.py recordings/question.wav -o recordings/reply.wav
+    uv run full-run/habibi_adapter.py recordings/question.wav -o recordings/reply.wav
 
 TTFA benchmark (CPU TTS is slow, so raise the timeout):
-    uv run ttfa_harness.py --adapter habibi_adapter:HabibiS2SAdapter -n 1 --timeout 300 recordings/question.wav
+    uv run benchmark/ttfa_harness.py --adapter full-run/habibi_adapter.py:HabibiS2SAdapter -n 1 --timeout 300 recordings/question.wav
 
 The reply is spoken sentence by sentence as the LLM streams it, so the first sentence
 starts synthesizing before the LLM has finished.
@@ -29,21 +29,16 @@ import numpy as np
 import soundfile as sf
 from dotenv import load_dotenv
 
-from example_adapters import LocalModelAdapter
-from habibi_synth import HabibiTTS
-from ttfa_harness import CHUNK, SR
+from benchmark.example_adapters import LocalModelAdapter
+from benchmark.ttfa_harness import CHUNK, SR, load_input
+from llm.llm_chat import SYSTEM_PROMPT
+from tts.habibi_synth import HabibiTTS
 
 load_dotenv()
 
 ENDPOINT_MS = 500      # silence after speech that ends the user's turn
 VAD_WINDOW = 512       # samples per silero VAD call at 16 kHz
 SENTENCE_END = re.compile(r"[.!?؟\n]")
-
-SYSTEM_PROMPT = (
-    "You are a helpful voice assistant. Reply in Moroccan Darija written in Arabic script, "
-    "in one or two short sentences. Your reply is spoken aloud, so use no emojis, lists, "
-    "Latin letters or other formatting."
-)
 
 
 # Models are loaded once per process and shared: the harness builds a fresh adapter per run.
@@ -151,8 +146,6 @@ class HabibiS2SAdapter(LocalModelAdapter):
 
 async def _reply_to_file(in_path: str, out_path: str):
     """Feeds a WAV file in real time, like the harness, and saves the spoken reply."""
-    from ttfa_harness import load_input
-
     pcm = load_input(in_path)
     adapter = HabibiS2SAdapter()
     await adapter.connect()

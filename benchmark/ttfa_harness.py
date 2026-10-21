@@ -1,8 +1,6 @@
 """
 TTFA (Time To First Audio) harness for speech-to-speech systems.
 
-    pip install silero-vad soundfile numpy torch
-
 Input files: 16 kHz, mono WAV containing one user utterance.
 
 TTFA is measured from the *reference* end of speech (offline VAD on the input file)
@@ -10,14 +8,17 @@ to the first audio the system sends back. The file is streamed in real time, fol
 by silence, exactly like a live microphone.
 
 Usage:
-    python ttfa_harness.py --adapter example_adapters:FakeS2SAdapter -n 3 a.wav b.wav
+    uv run benchmark/ttfa_harness.py --adapter benchmark.example_adapters:FakeS2SAdapter -n 3 a.wav b.wav
+    uv run benchmark/ttfa_harness.py --adapter full-run/habibi_adapter.py:HabibiS2SAdapter a.wav
 """
 import argparse
 import asyncio
-import importlib
+import importlib.util
 import json
+import sys
 import time
 from functools import lru_cache
+from pathlib import Path
 
 import numpy as np
 import soundfile as sf
@@ -180,17 +181,27 @@ def summarize(results: list[dict], key: str = "ttfa_audible_ms") -> dict:
 
 
 def load_factory(spec: str):
-    """'module:attr' -> callable returning a fresh adapter (a class or a factory function)."""
-    module_name, _, attr = spec.partition(":")
-    if not attr:
+    """'module:attr' or 'path/to/file.py:attr' -> callable returning a fresh adapter
+    (a class or a factory function). File paths allow scripts in folders that aren't
+    importable packages, like full-run/."""
+    module_name, _, attr = spec.rpartition(":")
+    if not module_name:
         raise ValueError(f"--adapter must look like module:ClassName, got {spec!r}")
-    return getattr(importlib.import_module(module_name), attr)
+    if module_name.endswith(".py"):
+        name = Path(module_name).stem
+        module_spec = importlib.util.spec_from_file_location(name, module_name)
+        module = importlib.util.module_from_spec(module_spec)
+        sys.modules[name] = module
+        module_spec.loader.exec_module(module)
+    else:
+        module = importlib.import_module(module_name)
+    return getattr(module, attr)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("files", nargs="+", help="16 kHz mono WAV files, one utterance each")
-    parser.add_argument("--adapter", required=True, help="adapter factory as module:ClassName")
+    parser.add_argument("--adapter", required=True, help="adapter factory as module:ClassName or path/to/file.py:ClassName")
     parser.add_argument("-n", "--repetitions", type=int, default=5)
     parser.add_argument("--timeout", type=float, default=TIMEOUT_S,
                         help=f"seconds after end of speech to wait for audio (default {TIMEOUT_S})")

@@ -1,20 +1,41 @@
 [project]
 name = "s2s-pipeline"
 version = "0.1.0"
-description = "Add your description here"
+description = "Arabic speech-to-speech: moulsot ASR -> LLM -> Habibi TTS"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "habibi-tts>=0.1.1",
     "numpy>=2.5.4",
     "openai>=3.35.1",
+    "pipecat-ai[openai,runner,silero,webrtc]>=1.12.0",
     "python-dotenv>=1.2.4",
     "qwen-asr>=0.0.6",
     "silero-vad>=6.2.3",
     "sounddevice>=0.5.6",
-    "soundfile>=0.14.0",
+    "soundfile>=0.13.1",
     "torch>=2.4.0,<2.9.0",
     "torchaudio>=2.4.0,<2.9.0",
     "truststore>=0.10.5",
     "websockets>=17.3",
 ]
+
+# Installs asr/, tts/, llm/ and benchmark/ (editable) so scripts in any folder can import
+# them, e.g. `from tts.habibi_synth import HabibiTTS`.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["asr", "tts", "llm", "benchmark"]
+
+# CUDA 12.8 builds of torch/torchaudio (needed for RTX 50xx / Blackwell GPUs; also fine on older
+# NVIDIA GPUs). The CPU-only scripts keep working with these: they just don't use the GPU.
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }

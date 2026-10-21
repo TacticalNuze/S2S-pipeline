@@ -1,0 +1,661 @@
+<title>Darija Voice Stack Benchmark</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans+Arabic:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one technical report column (max ~68rem) — summary tiles, then charts in two-up grids
+   that stack on phones, then tables and the full spec sheet. Data is the loud part; chrome stays quiet. */
+:root {
+  --page: #f5f6f4;         /* page plane, faint green-grey bias */
+  --surface: #fcfcfb;      /* chart and card surface */
+  --ink: #111312;
+  --ink-2: #4c524f;
+  --muted: #7d837f;
+  --rule: #dfe2dd;
+  --axis: #c3c6c0;
+  --accent: #0f6a5b;       /* links, section marks: a deep zellige green */
+  --accent-wash: #e3efeb;
+  --m27: #2a78d6;          /* Qwen3.8 27B  (categorical slot 1) */
+  --m9q: #eb6834;          /* Qwen3.5 9B   (slot 2) */
+  --m9a: #1baf7a;          /* Atlas-Chat 9B (slot 3) */
+  --seg-os: #d4d6d0;       /* Windows desktop share of VRAM */
+  --seg-voice: #6b716d;    /* ASR + TTS share of VRAM */
+  --good: #0a7d0a; --good-bg: #e2f2e2;
+  --warn: #8a5a00; --warn-bg: #fbeed2;
+  --bad: #b4302f;  --bad-bg: #f8e1e0;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-ar: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #0f1110; --surface: #181a19; --ink: #eef0ed; --ink-2: #bfc4c0; --muted: #8d938f;
+    --rule: #2a2e2c; --axis: #3a3f3c; --accent: #5cc4ad; --accent-wash: #16302a;
+    --m27: #3987e5; --m9q: #d95926; --m9a: #199e70; --seg-os: #3b3f3d; --seg-voice: #8e9590;
+    --good: #4cc44c; --good-bg: #13301a; --warn: #e8b04a; --warn-bg: #33270e; --bad: #ef7d7c; --bad-bg: #3a1818;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #0f1110; --surface: #181a19; --ink: #eef0ed; --ink-2: #bfc4c0; --muted: #8d938f;
+  --rule: #2a2e2c; --axis: #3a3f3c; --accent: #5cc4ad; --accent-wash: #16302a;
+  --m27: #3987e5; --m9q: #d95926; --m9a: #199e70; --seg-os: #3b3f3d; --seg-voice: #8e9590;
+  --good: #4cc44c; --good-bg: #13301a; --warn: #e8b04a; --warn-bg: #33270e; --bad: #ef7d7c; --bad-bg: #3a1818;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font: 400 1rem/1.6 var(--f-body); }
+.wrap { max-width: 68rem; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: grid; gap: 56px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); letter-spacing: -0.01em; }
+h2 { font-size: 1.6rem; }
+h3 { font-size: 1.1rem; font-weight: 500; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+[lang="ar"] { font-family: var(--f-ar); font-size: 1.05em; line-height: 1.8; }
+.eyebrow { font: 500 0.74rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 1.15rem; color: var(--ink-2); }
+section { display: grid; gap: 20px; min-width: 0; }
+.sec-head { display: grid; gap: 8px; }
+.sec-head p { color: var(--ink-2); }
+
+/* header */
+header { display: grid; gap: 18px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 400 0.85rem/1.4 var(--f-mono); color: var(--muted); }
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 500 0.82rem/1 var(--f-mono); color: var(--ink-2); }
+.flow span { padding: 7px 10px; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; }
+.flow i { font-style: normal; color: var(--muted); }
+
+/* verdict */
+.verdict { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 12px; }
+.pick { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.pick.main { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pick .role { font: 500 0.72rem/1 var(--f-mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.pick .name { display: flex; align-items: center; gap: 8px; font: 600 1.2rem/1.2 var(--f-display); }
+.pick p { font-size: 0.93rem; color: var(--ink-2); }
+.key { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; }
+
+/* stat tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 18px; display: grid; gap: 4px; align-content: start; }
+.tile .v { font: 600 2rem/1.1 var(--f-display); }
+.tile .v small { font: 500 1rem var(--f-body); color: var(--ink-2); margin-left: 3px; }
+.tile .l { font-size: 0.88rem; color: var(--ink-2); }
+.tile .n { font: 400 0.76rem/1.4 var(--f-mono); color: var(--muted); }
+
+/* charts */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px 18px 14px; display: grid; gap: 10px; min-width: 0; }
+.card h3 + p { font-size: 0.88rem; color: var(--ink-2); }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { font-family: var(--f-body); fill: var(--ink-2); }
+.chart .tick { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.chart .lbl { font-size: 12.5px; fill: var(--ink); }
+.chart .val { font-size: 12px; fill: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart .grid { stroke: var(--rule); stroke-width: 1; }
+.chart .base { stroke: var(--axis); stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: default; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.legend .sw.dot { border-radius: 50%; width: 9px; height: 9px; }
+.legend .sw.tick { width: 3px; height: 14px; border-radius: 1px; background: var(--ink); }
+.legend .sw.hatch { background: repeating-linear-gradient(45deg, var(--seg-voice) 0 2px, transparent 2px 5px); outline: 1px solid var(--seg-voice); outline-offset: -1px; }
+.note { font-size: 0.8rem; color: var(--muted); }
+.tip { position: absolute; pointer-events: none; z-index: 5; background: var(--ink); color: var(--surface); font: 400 0.8rem/1.45 var(--f-body); padding: 7px 10px; border-radius: 6px; max-width: 16rem; transform: translate(-50%, calc(-100% - 10px)); white-space: normal; }
+.tip b { font-weight: 600; }
+.tip[hidden] { display: none; }
+
+/* tables */
+.tscroll { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 500 0.74rem/1.3 var(--f-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); background: var(--surface); }
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .mname { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; white-space: nowrap; }
+
+/* chips */
+.chip { display: inline-flex; align-items: center; gap: 5px; font: 500 0.78rem/1 var(--f-body); padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+.chip svg { width: 11px; height: 11px; }
+.chip.good { color: var(--good); background: var(--good-bg); }
+.chip.warn { color: var(--warn); background: var(--warn-bg); }
+.chip.bad { color: var(--bad); background: var(--bad-bg); }
+
+/* samples */
+.samples { display: grid; gap: 14px; }
+.sample { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; }
+.sample .q { padding: 14px 18px; background: var(--accent-wash); display: grid; gap: 2px; }
+.sample .q .gloss { font-size: 0.86rem; color: var(--ink-2); }
+.answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+.ans { padding: 14px 18px; display: grid; gap: 6px; align-content: start; border-top: 1px solid var(--rule); min-width: 0; }
+.ans .who { display: flex; align-items: center; gap: 7px; font: 500 0.82rem/1.2 var(--f-body); color: var(--ink-2); }
+.ans .who .t { margin-left: auto; font: 400 0.76rem var(--f-mono); color: var(--muted); }
+.ans .gloss { font-size: 0.84rem; color: var(--ink-2); font-style: italic; }
+.ans .flag { font-size: 0.84rem; }
+
+details { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; }
+details > summary { cursor: pointer; padding: 14px 18px; font-weight: 500; }
+details[open] > summary { border-bottom: 1px solid var(--rule); }
+details .tscroll { border: 0; border-radius: 0 0 10px 10px; }
+
+/* specs */
+.specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); gap: 16px; }
+.specs dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 8px 14px; font-size: 0.9rem; }
+.specs dt { color: var(--muted); font: 400 0.8rem/1.6 var(--f-mono); }
+.specs dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+pre { margin: 0; font: 400 0.8rem/1.6 var(--f-mono); background: var(--page); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 14px; overflow-x: auto; color: var(--ink); }
+ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 70ch; }
+ul.plain li::marker { color: var(--muted); }
+footer { font-size: 0.82rem; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 18px; display: grid; gap: 6px; }
+@media (max-width: 520px) { .wrap { padding-block: 28px 56px; gap: 44px; } .specs dl { grid-template-columns: 1fr; gap: 2px 0; } .specs dd { margin-bottom: 8px; } }
+@media (prefers-reduced-motion: no-preference) { .bar-anim { transition: opacity .2s; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Benchmark report · 21 October 2026</div>
+  <h1>Darija voice assistant on one 16&nbsp;GB GPU</h1>
+  <p class="lede">Three local language models tested as the “brain” of a Moroccan Darija speech-to-speech assistant, running entirely on a consumer NVIDIA RTX&nbsp;5060&nbsp;Ti. We measured how fast each starts answering, whether it fits in video memory beside the speech models, and how natural its Darija sounds.</p>
+  <div class="flow" aria-label="Pipeline">
+    <span>Microphone</span><i>→</i><span>Silero VAD</span><i>→</i><span>moulsot ASR</span><i>→</i><span>LLM (tested here)</span><i>→</i><span>Habibi TTS</span><i>→</i><span>Speaker</span>
+  </div>
+  <div class="meta"><span>RTX 5060 Ti 16 GB</span><span>llama.cpp b11669</span><span>Windows 11 Pro</span><span>Pipecat 1.13</span></div>
+</header>
+
+<section aria-labelledby="s-verdict">
+  <div class="sec-head">
+    <div class="eyebrow">Summary</div>
+    <h2 id="s-verdict">Which model for which job</h2>
+  </div>
+  <div class="verdict">
+    <div class="pick main">
+      <div class="role">Live voice assistant</div>
+      <div class="name"><span class="key" style="background:var(--m9a)"></span>Atlas-Chat 9B</div>
+      <p>Fastest to start speaking (0.44&nbsp;s to the first sentence) and the most natural Darija of the three. Fits beside the speech models with 3.4&nbsp;GiB of video memory to spare.</p>
+    </div>
+    <div class="pick">
+      <div class="role">Text-only comparison with cloud LLMs</div>
+      <div class="name"><span class="key" style="background:var(--m27)"></span>Qwen3.8 27B</div>
+      <p>The largest and most capable model, fluent in Darija. Needs 12.3&nbsp;GiB by itself, so it cannot share the GPU with speech recognition and synthesis.</p>
+    </div>
+    <div class="pick">
+      <div class="role">Not recommended for Darija</div>
+      <div class="name"><span class="key" style="background:var(--m9q)"></span>Qwen3.5 9B</div>
+      <p>Fast and small, but its Darija drifts into Modern Standard Arabic and some replies don’t make sense.</p>
+    </div>
+  </div>
+  <div class="tiles">
+    <div class="tile"><div class="v">0.44<small>s</small></div><div class="l">to the first spoken sentence’s text, Atlas-Chat 9B</div><div class="n">median of 6 prompts</div></div>
+    <div class="tile"><div class="v">12.5<small>of 15.9 GiB</small></div><div class="l">peak video memory, full stack: ASR + Atlas-Chat + TTS</div><div class="n">nvidia-smi, includes Windows</div></div>
+    <div class="tile"><div class="v">0.20<small>s</small></div><div class="l">speech recognition for a 2.9&nbsp;s utterance (moulsot, GPU)</div><div class="n">warm model</div></div>
+    <div class="tile"><div class="v">0.41<small>× real time</small></div><div class="l">speech synthesis: 2.6&nbsp;s of audio generated in 1.06&nbsp;s (Habibi, GPU)</div><div class="n">warm model, 32 steps</div></div>
+  </div>
+</section>
+
+<section aria-labelledby="s-latency">
+  <div class="sec-head">
+    <div class="eyebrow">Responsiveness</div>
+    <h2 id="s-latency">How quickly each model starts answering</h2>
+    <p>A voice assistant can start speaking as soon as the first sentence is complete, so the time to the first sentence matters more than raw throughput. Each dot is one of the six Darija prompts.</p>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3>Time to first sentence</h3>
+      <p>Seconds from sending the request to the first complete sentence of text.</p>
+      <div class="legend"><span><span class="sw dot" style="background:var(--muted)"></span>One prompt</span><span><span class="sw tick"></span>Median</span></div>
+      <div class="chart" id="c-sentence"></div>
+    </div>
+    <div class="card">
+      <h3>Generation speed</h3>
+      <p>Median tokens per second while writing the reply.</p>
+      <div class="chart" id="c-speed"></div>
+      <p class="note">The 9B models generate about twice as fast, but on 20–50-token voice replies the difference is a fraction of a second.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="s-vram">
+  <div class="sec-head">
+    <div class="eyebrow">Video memory</div>
+    <h2 id="s-vram">Does the full voice stack fit on the GPU?</h2>
+    <p>The speech recognition and synthesis models need about 4.5–5&nbsp;GiB on top of the language model and the 1&nbsp;GiB Windows keeps for the display. The card has 15.9&nbsp;GiB.</p>
+  </div>
+  <div class="card">
+    <h3>Peak video memory with ASR, LLM and TTS loaded together</h3>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--seg-os)"></span>Windows desktop</span>
+      <span><span class="sw" style="background:var(--m27)"></span><span class="sw" style="background:var(--m9q);margin-left:-4px"></span><span class="sw" style="background:var(--m9a);margin-left:-4px"></span>Language model server</span>
+      <span><span class="sw" style="background:var(--seg-voice)"></span>ASR + TTS (measured)</span>
+      <span><span class="sw hatch"></span>ASR + TTS (projected)</span>
+    </div>
+    <div class="chart" id="c-vram"></div>
+    <p class="note">Qwen3.8 27B was measured alone (13.3&nbsp;GiB including Windows). Its full-stack bar adds the ASR + TTS share measured with Atlas-Chat, so it is a projection: we did not load all three, because it would exceed the card.</p>
+  </div>
+</section>
+
+<section aria-labelledby="s-mtp">
+  <div class="sec-head">
+    <div class="eyebrow">Tuning</div>
+    <h2 id="s-mtp">Multi-token prediction on Qwen3.8 27B</h2>
+    <p>The Qwen models carry a built-in draft layer that guesses upcoming tokens, which the main model then checks in one pass. We tested how far ahead it should guess, on a 600-token English answer.</p>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3>Decode speed by draft depth</h3>
+      <p>Tokens per second on a 600-token answer. The share of drafted tokens accepted is shown under each column.</p>
+      <div class="chart" id="c-mtp"></div>
+    </div>
+    <div class="card">
+      <h3>What we kept</h3>
+      <ul class="plain">
+        <li>Drafting <b>2 tokens</b> ahead is fastest: 46.9 tok/s, 1.7× the speed without it, for 0.8&nbsp;GiB more memory.</li>
+        <li>Going further ahead wastes work: at 3 tokens only half the drafts are accepted, and speed drops to 43.3 tok/s.</li>
+        <li>On short Darija replies fewer drafts are accepted (about 15–60%), so the gain there is smaller, about 1.3×.</li>
+        <li>Thinking mode is switched off for every model. With it on, the user would wait through hidden reasoning before hearing anything.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="s-quality">
+  <div class="sec-head">
+    <div class="eyebrow">Language quality</div>
+    <h2 id="s-quality">How the replies read</h2>
+    <p>An informal read of 18 replies (6 prompts × 3 models). It has not yet been reviewed by native Darija speakers, so treat it as a first impression, not a score.</p>
+  </div>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>Model</th><th>Sounds Moroccan</th><th>Standard Arabic mixed in</th><th>Problems found in 6 replies</th></tr></thead>
+      <tbody>
+        <tr><td><span class="mname"><span class="key" style="background:var(--m9a)"></span>Atlas-Chat 9B</span></td>
+          <td><span class="chip good"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5 5 9.5 10 3" fill="none" stroke="currentColor" stroke-width="2"/></svg>Most natural</span></td>
+          <td><span class="chip good"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5 5 9.5 10 3" fill="none" stroke="currentColor" stroke-width="2"/></svg>Rarely</span></td>
+          <td><span class="chip warn"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 10.5H1Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 5v2.6" stroke="currentColor" stroke-width="1.6"/></svg>2</span> Salé gardens placed in Marrakech; Rabat–Fes 3 h 20</td></tr>
+        <tr><td><span class="mname"><span class="key" style="background:var(--m27)"></span>Qwen3.8 27B</span></td>
+          <td><span class="chip good"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5 5 9.5 10 3" fill="none" stroke="currentColor" stroke-width="2"/></svg>Fluent</span></td>
+          <td><span class="chip warn"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5 11 10.5H1Z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 5v2.6" stroke="currentColor" stroke-width="1.6"/></svg>Sometimes</span></td>
+          <td><span class="chip bad"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" stroke="currentColor" stroke-width="2"/></svg>3</span> Casablanca and the Alhambra for Marrakech; Rabat–Fes 3.5–4 h; a joke that doesn’t land</td></tr>
+        <tr><td><span class="mname"><span class="key" style="background:var(--m9q)"></span>Qwen3.5 9B</span></td>
+          <td><span class="chip bad"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" stroke="currentColor" stroke-width="2"/></svg>Often unnatural</span></td>
+          <td><span class="chip bad"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" stroke="currentColor" stroke-width="2"/></svg>Often</span></td>
+          <td><span class="chip bad"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" stroke="currentColor" stroke-width="2"/></svg>Several</span> Invented place names; a banana in the chicken tagine; no joke told</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Reference for the travel question: Rabat to Fes is about 200&nbsp;km by motorway, roughly 2 to 2.5 hours by car. None of the models should be relied on for facts without a retrieval or tool layer.</p>
+
+  <div class="samples">
+    <div class="sample">
+      <div class="q"><div lang="ar" dir="rtl">شنو أحسن بلاصة نزور فمراكش؟</div><div class="gloss">“What’s the best place to visit in Marrakech?”</div></div>
+      <div class="answers">
+        <div class="ans"><div class="who"><span class="key" style="background:var(--m9a)"></span>Atlas-Chat 9B<span class="t">0.42 s</span></div><div lang="ar" dir="rtl">أحسن حاجة هي تزور جنان سلا, راه جميل بزاف!</div><div class="gloss">“The best thing is to visit the gardens of Salé, it’s really beautiful!”</div><div class="flag"><span class="chip warn">Wrong city</span> Salé is next to Rabat.</div></div>
+        <div class="ans"><div class="who"><span class="key" style="background:var(--m27)"></span>Qwen3.8 27B<span class="t">1.25 s</span></div><div lang="ar" dir="rtl">أحسن بلاصة بزاف هي الدار البيضاء، خاصك تشوف القصر الحمراء والمدينة القديمة والحدائق.</div><div class="gloss">“The very best place is Casablanca; you should see the Alhambra palace, the old medina and the gardens.”</div><div class="flag"><span class="chip bad">Wrong twice</span> Another city, and the Alhambra is in Granada.</div></div>
+        <div class="ans"><div class="who"><span class="key" style="background:var(--m9q)"></span>Qwen3.5 9B<span class="t">0.68 s</span></div><div lang="ar" dir="rtl">أفضل بلاصة تزورها هي دوار شرف لفحص الجبل، أو قلعة الحسّان ليكبروا فيها.</div><div class="gloss">Names places that don’t match Marrakech sights, in phrasing that doesn’t quite parse.</div><div class="flag"><span class="chip bad">Unclear</span></div></div>
+      </div>
+    </div>
+    <div class="sample">
+      <div class="q"><div lang="ar" dir="rtl">عندي امتحان غدا وأنا مقلق بزاف، شنو ندير؟</div><div class="gloss">“I have an exam tomorrow and I’m very anxious, what should I do?”</div></div>
+      <div class="answers">
+        <div class="ans"><div class="who"><span class="key" style="background:var(--m9a)"></span>Atlas-Chat 9B<span class="t">0.40 s</span></div><div lang="ar" dir="rtl">كون هاني, كولشي غادي مزيان إن شاء الله. قرا مزيان و تيق في راسك, راه أسهل طريقة باش تنجح.</div><div class="gloss">“Relax, everything will be fine, God willing. Study well and trust yourself, that’s the easiest way to pass.”</div><div class="flag"><span class="chip good">Natural Darija</span></div></div>
+        <div class="ans"><div class="who"><span class="key" style="background:var(--m27)"></span>Qwen3.8 27B<span class="t">1.55 s</span></div><div lang="ar" dir="rtl">ما تخافش، راجع الدروس بتركيز ونام بدري باش تريح دماغك. غادي تكون فبلايك إن شاء الله.</div><div class="gloss">“Don’t worry, review your lessons carefully and sleep early to rest your mind. You’ll be fine, God willing.”</div><div class="flag"><span class="chip good">Good</span></div></div>
+        <div class="ans"><div class="who"><span class="key" style="background:var(--m9q)"></span>Qwen3.5 9B<span class="t">0.60 s</span></div><div lang="ar" dir="rtl">خوش روحك ولا الله، ركز على المذاكرة الهادئة واطمئن، إن شاء الله ستنجح بلا شك.</div><div class="gloss">Starts with an unclear phrase, then switches to Standard Arabic (“ستنجح بلا شك”, “you will surely succeed”).</div><div class="flag"><span class="chip warn">Standard Arabic</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <details>
+    <summary>All 18 replies with timings</summary>
+    <div class="tscroll">
+      <table id="t-replies">
+        <thead><tr><th>Prompt</th><th>Model</th><th>Reply</th><th class="num">First token</th><th class="num">First sentence</th><th class="num">tok/s</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </details>
+</section>
+
+<section aria-labelledby="s-table">
+  <div class="sec-head">
+    <div class="eyebrow">Data</div>
+    <h2 id="s-table">Results table</h2>
+  </div>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>Model</th><th>Quantization</th><th class="num">File</th><th class="num">GPU memory, LLM only</th><th class="num">Peak, full stack</th><th class="num">First token</th><th class="num">First sentence</th><th class="num">tok/s</th></tr></thead>
+      <tbody>
+        <tr><td><span class="mname"><span class="key" style="background:var(--m9a)"></span>Atlas-Chat 9B</span></td><td>Q4_K_M</td><td class="num">5.8 GB</td><td class="num">7.0 GiB</td><td class="num">12.5 GiB</td><td class="num">0.08 s</td><td class="num">0.44 s</td><td class="num">51</td></tr>
+        <tr><td><span class="mname"><span class="key" style="background:var(--m9q)"></span>Qwen3.5 9B</span></td><td>Q4_K_M + MTP</td><td class="num">5.9 GB</td><td class="num">5.7 GiB</td><td class="num">11.6 GiB</td><td class="num">0.15 s</td><td class="num">0.60 s</td><td class="num">58</td></tr>
+        <tr><td><span class="mname"><span class="key" style="background:var(--m27)"></span>Qwen3.8 27B</span></td><td>IQ3_S + MTP</td><td class="num">12.1 GB</td><td class="num">12.3 GiB</td><td class="num">≈17.8 GiB (projected)</td><td class="num">0.66 s</td><td class="num">1.60 s</td><td class="num">28</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Latency and speed are medians of 6 prompts, one run each. GPU memory is from <code>nvidia-smi</code>; “LLM only” excludes the ≈1&nbsp;GiB Windows uses, “peak” includes it. File sizes are on-disk GB; memory is GiB (1&nbsp;GiB = 1.074&nbsp;GB).</p>
+</section>
+
+<section aria-labelledby="s-specs">
+  <div class="sec-head">
+    <div class="eyebrow">Test setup</div>
+    <h2 id="s-specs">Hardware, software and settings</h2>
+  </div>
+  <div class="specs">
+    <div class="card">
+      <h3>Hardware</h3>
+      <dl>
+        <dt>GPU</dt><dd>NVIDIA GeForce RTX 5060 Ti, 16 GB (16,311 MiB reported), Blackwell</dd>
+        <dt>Driver</dt><dd>616.56, CUDA 13.4</dd>
+        <dt>CPU</dt><dd>AMD Ryzen 7 5700X, 8 cores / 16 threads, no integrated graphics</dd>
+        <dt>RAM</dt><dd>16 GB DDR4-2667</dd>
+        <dt>OS</dt><dd>Windows 11 Pro 10.0.26200</dd>
+        <dt>Display</dt><dd>Driven by the same GPU, which keeps ≈1.0–1.2 GiB for the desktop</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h3>Software</h3>
+      <dl>
+        <dt>LLM server</dt><dd>llama.cpp <code>llama-server</code> b11669 (v0.7.0-dev, commit 620d2225c), Windows CUDA 13.4 build</dd>
+        <dt>Voice pipeline</dt><dd>Pipecat 1.13.0, Python 3.13.13</dd>
+        <dt>ML runtime</dt><dd>PyTorch 2.8.0+cu128, transformers 4.57.6</dd>
+        <dt>ASR</dt><dd>qwen-asr 0.0.6</dd>
+        <dt>TTS</dt><dd>habibi-tts 0.1.1 on f5-tts 1.1.22</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h3>Models</h3>
+      <dl>
+        <dt>ASR</dt><dd><a href="https://huggingface.co/atlasia/moulsot.v0.3" target="_blank" rel="noopener">atlasia/moulsot.v0.3</a>, bfloat16 on GPU</dd>
+        <dt>TTS</dt><dd><a href="https://huggingface.co/SWivid/Habibi-TTS" target="_blank" rel="noopener">SWivid/Habibi-TTS</a> Unified, Vocos 24 kHz vocoder, 32 steps, Moroccan reference voice</dd>
+        <dt>LLM</dt><dd><a href="https://huggingface.co/ukisai/Swift-1.5-Qwen3.8-27b" target="_blank" rel="noopener">Swift-1.5 Qwen3.8 27B</a>, GSQ-RCO IQ3_S with MTP layer</dd>
+        <dt>LLM</dt><dd><a href="https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF" target="_blank" rel="noopener">unsloth/Qwen3.5-9B-MTP-GGUF</a>, Q4_K_M</dd>
+        <dt>LLM</dt><dd><a href="https://huggingface.co/mradermacher/Atlas-Chat-9B-GGUF" target="_blank" rel="noopener">mradermacher/Atlas-Chat-9B-GGUF</a>, Q4_K_M, from MBZUAI-Paris/Atlas-Chat-9B</dd>
+      </dl>
+    </div>
+    <div class="card">
+      <h3>Method</h3>
+      <ul class="plain">
+        <li>Six Darija prompts (greeting, sightseeing, recipe, travel time, reassurance, a joke) sent through the OpenAI-compatible streaming API.</li>
+        <li>The assistant’s real system prompt: reply in Darija, Arabic script, one or two short sentences.</li>
+        <li>One warm-up request, then one run per prompt. Temperature 0.7, max 200 tokens.</li>
+        <li>First token: first reply text received. First sentence: first <code>. ! ? ؟</code> or line break.</li>
+        <li>Speed from llama.cpp’s own timings. Memory from <code>nvidia-smi</code> during one real ASR → LLM → TTS pass.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Server settings</h3>
+    <p>Common to all three: every layer on the GPU, flash attention, 8-bit KV cache, one conversation at a time.</p>
+<pre>llama-server -m &lt;model.gguf&gt; --n-gpu-layers all --flash-attn on -ctk q8_0 -ctv q8_0 --parallel 1 --jinja
+
+# Qwen3.8 27B and Qwen3.5 9B
+-c 16384 (27B) / 8192 (9B)  --spec-type draft-mtp --spec-draft-n-max 2 --gpu-layers-draft all
+--reasoning off  --temp 0.7 --top-p 0.8 --top-k 20 --min-p 0 --presence-penalty 1.5
+
+# Atlas-Chat 9B (Gemma 2 based: no thinking mode, no MTP layer)
+-c 8192  --temp 0.7 --top-p 0.9 --min-p 0.05 --repeat-penalty 1.1</pre>
+  </div>
+</section>
+
+<section aria-labelledby="s-limits">
+  <div class="sec-head">
+    <div class="eyebrow">Limits</div>
+    <h2 id="s-limits">What this benchmark does not show yet</h2>
+  </div>
+  <ul class="plain">
+    <li><b>End-to-end voice latency.</b> We timed each stage separately. The full time from the user stopping to the first audible reply in the live assistant has not been measured yet.</li>
+    <li><b>Cloud comparison.</b> The same prompts have not yet been run against a cloud model.</li>
+    <li><b>Variance.</b> One run per prompt at temperature 0.7; repeat runs could move individual timings by roughly ±10%.</li>
+    <li><b>Quality.</b> Six prompts and one informal reviewer. A proper evaluation needs more prompts and native-speaker ratings.</li>
+    <li><b>Other hardware.</b> All figures are for this one machine. Cards with more memory could run the 27B beside the speech models.</li>
+  </ul>
+</section>
+
+<footer>
+  <span>Raw results: <code>benchmark/results/llm_compare_2026-10-21.json</code> in the S2S pipeline repository.</span>
+  <span>Measured 21 October 2026.</span>
+</footer>
+</div>
+
+<div class="tip" id="tip" hidden role="status"></div>
+
+<script>
+(() => {
+  const NS = "http://www.w3.org/2000/svg";
+  const MODELS = [
+    { id: "atlas", name: "Atlas-Chat 9B", color: "var(--m9a)" },
+    { id: "q9",    name: "Qwen3.5 9B",    color: "var(--m9q)" },
+    { id: "q27",   name: "Qwen3.8 27B",   color: "var(--m27)" },
+  ];
+  const PROMPTS = [
+    ["السلام عليكم، كيداير؟", "Hello, how are you?"],
+    ["شنو أحسن بلاصة نزور فمراكش؟", "Best place to visit in Marrakech?"],
+    ["عاوني نطيب طاجين بالدجاج", "Help me cook a chicken tagine"],
+    ["شحال كاين من ساعة بين الرباط وفاس فالطوموبيل؟", "How many hours from Rabat to Fes by car?"],
+    ["عندي امتحان غدا وأنا مقلق بزاف، شنو ندير؟", "Exam tomorrow and I'm anxious, what should I do?"],
+    ["واش تقدر تقول ليا نكتة مغربية؟", "Can you tell me a Moroccan joke?"],
+  ];
+  // Per prompt: [first token s, first sentence s, tok/s, reply]
+  const RUNS = {
+    q27: [
+      [0.38, 0.62, 36.7, "وعليكم السلام، الحمد لله بخير. واش عندك شي حاجة بغيتي تسولني عليها؟"],
+      [0.38, 1.25, 29.3, "أحسن بلاصة بزاف هي الدار البيضاء، خاصك تشوف القصر الحمراء والمدينة القديمة والحدائق. هاد الأماكن غادي تعطيك تجربة ثقافية وجمالية ما تنساهاش."],
+      [0.66, 1.87, 31.7, "تقطّع الدجاج وتطفيه بالزيت، تضيف البصل والبطاطس مع الملح والبهارات، ثم تتركه يطيب على نار هادية حتى ينضج. عند ما يكون جاهز، قدّمه مع الخبز البلدي وشوية من القنبيط أو العسل حسب ذوقك."],
+      [0.66, 1.75, 27.3, "بالتقريب كتاخد ثلاث ساعات ونصف حتى أربع ساعات، ولكن هادشي كيعتمد على الزحام و الطريق اللي كتاخده."],
+      [0.71, 1.55, 25.7, "ما تخافش، راجع الدروس بتركيز ونام بدري باش تريح دماغك. غادي تكون فبلايك إن شاء الله."],
+      [0.66, 1.65, 23.5, "واش سمعتي على الخمار اللي غادر من الدار، قالو ليه واش رايح فين؟ جاوب: راكح نديا!"],
+    ],
+    q9: [
+      [0.15, 0.46, 57.9, "وعليكم السلام، أنا هنا باش نسعدك بحال ما تخدم. شنو عندك اليوم؟"],
+      [0.15, 0.68, 54.7, "أفضل بلاصة تزورها هي دوار شرف لفحص الجبل، أو قلعة الحسّان ليكبروا فيها."],
+      [0.12, 0.63, 63.6, "بالطبع، اخلطي الدجاج مع الطماطم والبهارات وخليه يطيب على نار هادئة مع البطاطا والموزة. تحب تخدم ليك طريقة معينة أو حاجة خاصة؟"],
+      [0.16, 0.59, 55.2, "السبحة بين الرباط وفاس كاتقدر تنعقد على ساعتي شوية بالطوموبيل."],
+      [0.11, 0.60, 58.9, "خوش روحك ولا الله، ركز على المذاكرة الهادئة واطمئن، إن شاء الله ستنجح بلا شك."],
+      [0.16, 0.47, 63.1, "أهلاً بك، باش نتفرج على نكتة مغربية حكاها ليك؟"],
+    ],
+    atlas: [
+      [0.07, 0.20, 52.0, "أهلان وا ساهلان! أنا لاباس عليا، شكرا على السؤال. نتا كيفاش؟"],
+      [0.08, 0.42, 50.8, "أحسن حاجة هي تزور جنان سلا, راه جميل بزاف!"],
+      [0.07, 0.47, 53.8, "واخا أ صاحبي, غادي نعاونك ف الطاجين ديال الدجاج. شنو خاصك؟"],
+      [0.07, 0.75, 51.9, "بضبط تلاتا دسوايع و اربع قسام، ولكن هادشي كايعتامد على حركة السير و الطرق لي تاخدو."],
+      [0.10, 0.40, 50.8, "كون هاني, كولشي غادي مزيان إن شاء الله. قرا مزيان و تيق في راسك, راه أسهل طريقة باش تنجح."],
+      [0.10, 0.77, 48.5, "آه، واخا نقولك وحدة النكتة المغربية: علاش البزاق ما كيحبوش يضحكو فالمغرب؟ حيت خايفين من ضحكة القوالب!"],
+    ],
+  };
+  const MEDIAN = { atlas: { s: 0.44, tps: 51.4 }, q9: { s: 0.60, tps: 58.4 }, q27: { s: 1.60, tps: 28.3 } };
+  // MiB from nvidia-smi. os = Windows baseline (~1,050 MiB); voice = ASR + TTS.
+  const VRAM = [
+    { id: "atlas", os: 1050, llm: 7135, voice: 4606, projected: false },
+    { id: "q9",    os: 1050, llm: 5832, voice: 5033, projected: false },
+    { id: "q27",   os: 1050, llm: 12608, voice: 4606, projected: true },
+  ];
+  const CAPACITY = 16311;
+  const MTP = [
+    { k: "Off", tps: 28.0, acc: null },
+    { k: "1 ahead", tps: 41.2, acc: 80 },
+    { k: "2 ahead", tps: 46.9, acc: 67 },
+    { k: "3 ahead", tps: 43.3, acc: 52 },
+  ];
+
+  const tip = document.getElementById("tip");
+  const el = (tag, attrs = {}, parent) => {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const text = (parent, x, y, str, cls, anchor = "start", extra = {}) => {
+    const t = el("text", { x, y, class: cls, "text-anchor": anchor, ...extra }, parent);
+    t.textContent = str;
+    return t;
+  };
+  function showTip(evt, html, host) {
+    const box = host.getBoundingClientRect();
+    const pt = evt.touches ? evt.touches[0] : evt;
+    const x = (pt.clientX ?? box.left + box.width / 2) - box.left;
+    const y = (pt.clientY ?? box.top) - box.top;
+    tip.innerHTML = html;
+    tip.hidden = false;
+    host.appendChild(tip);
+    const half = tip.offsetWidth / 2;
+    tip.style.left = Math.min(Math.max(x, half), box.width - half) + "px";
+    tip.style.top = y + "px";
+  }
+  function hideTip() { tip.hidden = true; }
+  function hover(node, html, host) {
+    node.setAttribute("tabindex", "0");
+    node.setAttribute("role", "img");
+    node.setAttribute("aria-label", html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+    node.addEventListener("pointermove", e => showTip(e, html, host));
+    node.addEventListener("pointerleave", hideTip);
+    node.addEventListener("focus", () => {
+      const r = node.getBoundingClientRect(), b = host.getBoundingClientRect();
+      showTip({ clientX: r.left + r.width / 2, clientY: r.top }, html, host);
+    });
+    node.addEventListener("blur", hideTip);
+  }
+  // 4px rounded data-end, square at the baseline (horizontal bar from x0 to x1).
+  function hbarPath(x0, x1, y, h, r = 4) {
+    const w = Math.max(0, x1 - x0); r = Math.min(r, w, h / 2);
+    return `M${x0},${y}H${x0 + w - r}Q${x0 + w},${y} ${x0 + w},${y + r}V${y + h - r}Q${x0 + w},${y + h} ${x0 + w - r},${y + h}H${x0}Z`;
+  }
+  function vbarPath(x, y0, y1, w, r = 4) {
+    const h = Math.max(0, y0 - y1); r = Math.min(r, h, w / 2);
+    return `M${x},${y0}V${y1 + r}Q${x},${y1} ${x + r},${y1}H${x + w - r}Q${x + w},${y1} ${x + w},${y1 + r}V${y0}Z`;
+  }
+  const model = id => MODELS.find(m => m.id === id);
+
+  // 1. Time to first sentence: per-prompt dots + median tick, one row per model.
+  function sentenceChart() {
+    const host = document.getElementById("c-sentence");
+    const W = 520, L = 112, R = 24, rowH = 46, top = 8, H = top + rowH * 3 + 30;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Time to first sentence per prompt" }, host);
+    const max = 2.0, x = v => L + (v / max) * (W - L - R);
+    for (let v = 0; v <= max + 1e-9; v += 0.5) {
+      el("line", { x1: x(v), x2: x(v), y1: top, y2: top + rowH * 3, class: v === 0 ? "base" : "grid" }, svg);
+      text(svg, x(v), top + rowH * 3 + 18, v.toFixed(1) + " s", "tick", "middle");
+    }
+    MODELS.forEach((m, i) => {
+      const cy = top + rowH * i + rowH / 2;
+      text(svg, L - 12, cy + 4, m.name, "lbl", "end");
+      el("line", { x1: x(0), x2: x(max), y1: cy, y2: cy, class: "grid" }, svg);
+      RUNS[m.id].forEach((r, p) => {
+        const g = el("g", {}, svg);
+        el("circle", { cx: x(r[1]), cy, r: 5, fill: m.color, stroke: "var(--surface)", "stroke-width": 2 }, g);
+        const hit = el("circle", { cx: x(r[1]), cy, r: 12, class: "hit" }, g);
+        hover(hit, `<b>${m.name}</b><br>${PROMPTS[p][1]}<br>First sentence ${r[1].toFixed(2)} s · first token ${r[0].toFixed(2)} s`, host);
+      });
+      const med = MEDIAN[m.id].s;
+      el("rect", { x: x(med) - 1.5, y: cy - 12, width: 3, height: 24, rx: 1, fill: "var(--ink)" }, svg);
+      text(svg, x(med), cy - 16, med.toFixed(2) + " s", "val", "middle");
+    });
+  }
+
+  // 2. Generation speed: one bar per model, value at the tip.
+  function speedChart() {
+    const host = document.getElementById("c-speed");
+    const W = 520, L = 112, R = 44, rowH = 46, top = 8, H = top + rowH * 3 + 30, bh = 20;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Median generation speed" }, host);
+    const max = 70, x = v => L + (v / max) * (W - L - R);
+    for (let v = 0; v <= max; v += 10) {
+      el("line", { x1: x(v), x2: x(v), y1: top, y2: top + rowH * 3, class: v === 0 ? "base" : "grid" }, svg);
+      if (v % 20 === 0 || v === 70) text(svg, x(v), top + rowH * 3 + 18, String(v), "tick", "middle");
+    }
+    text(svg, W - R + 4, top + rowH * 3 + 18, "tok/s", "tick", "start");
+    MODELS.forEach((m, i) => {
+      const y = top + rowH * i + (rowH - bh) / 2, v = MEDIAN[m.id].tps;
+      text(svg, L - 12, y + bh / 2 + 4, m.name, "lbl", "end");
+      el("path", { d: hbarPath(x(0), x(v), y, bh), fill: m.color }, svg);
+      text(svg, x(v) + 6, y + bh / 2 + 4, v.toFixed(0), "val", "start");
+      const all = RUNS[m.id].map(r => r[2]);
+      const hit = el("rect", { x: x(0), y: y - 6, width: x(v) - x(0) + 30, height: bh + 12, class: "hit" }, svg);
+      hover(hit, `<b>${m.name}</b><br>Median ${v.toFixed(1)} tok/s<br>Range ${Math.min(...all).toFixed(1)}–${Math.max(...all).toFixed(1)} tok/s`, host);
+    });
+  }
+
+  // 3. VRAM stacked bars against the card's capacity.
+  function vramChart() {
+    const host = document.getElementById("c-vram");
+    const W = 900, L = 120, R = 20, rowH = 54, top = 26, bh = 24, H = top + rowH * 3 + 34;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Peak GPU memory by configuration" }, host);
+    const defs = el("defs", {}, svg);
+    const pat = el("pattern", { id: "hatch", width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    el("rect", { width: 6, height: 6, fill: "var(--surface)" }, pat);
+    el("rect", { width: 2.2, height: 6, fill: "var(--seg-voice)" }, pat);
+    const maxG = 20, x = mib => L + (mib / 1024 / maxG) * (W - L - R);
+    for (let g = 0; g <= maxG; g += 4) {
+      el("line", { x1: x(g * 1024), x2: x(g * 1024), y1: top, y2: top + rowH * 3, class: g === 0 ? "base" : "grid" }, svg);
+      text(svg, x(g * 1024), top + rowH * 3 + 18, g + " GiB", "tick", "middle");
+    }
+    const cap = x(CAPACITY);
+    el("line", { x1: cap, x2: cap, y1: top - 10, y2: top + rowH * 3, stroke: "var(--ink)", "stroke-width": 1.5 }, svg);
+    text(svg, cap, top - 14, "Card capacity 15.9 GiB", "val", "middle");
+    VRAM.forEach((d, i) => {
+      const m = model(d.id), y = top + rowH * i + (rowH - bh) / 2;
+      text(svg, L - 12, y + bh / 2 + 4, m.name, "lbl", "end");
+      const segs = [
+        { v: d.os, fill: "var(--seg-os)", name: "Windows desktop" },
+        { v: d.llm, fill: m.color, name: "Language model server" },
+        { v: d.voice, fill: d.projected ? "url(#hatch)" : "var(--seg-voice)", name: d.projected ? "ASR + TTS (projected)" : "ASR + TTS" },
+      ];
+      let acc = 0;
+      segs.forEach((s, k) => {
+        const x0 = x(acc) + (k ? 1 : 0), x1 = x(acc + s.v) - (k < 2 ? 1 : 0);
+        const shape = k === 2 ? el("path", { d: hbarPath(x0, x1, y, bh), fill: s.fill }, svg)
+                              : el("rect", { x: x0, y, width: Math.max(0, x1 - x0), height: bh, fill: s.fill }, svg);
+        if (d.projected && k === 2) el("path", { d: hbarPath(x0, x1, y, bh), fill: "none", stroke: "var(--seg-voice)", "stroke-width": 1 }, svg);
+        const hit = el("rect", { x: x0, y: y - 6, width: Math.max(8, x1 - x0), height: bh + 12, class: "hit" }, svg);
+        hover(hit, `<b>${m.name}</b><br>${s.name}: ${(s.v / 1024).toFixed(1)} GiB`, host);
+        acc += s.v;
+      });
+      const total = d.os + d.llm + d.voice;
+      text(svg, x(total) + 8, y + bh / 2 + 4, (d.projected ? "≈" : "") + (total / 1024).toFixed(1) + " GiB" + (total > CAPACITY ? " · does not fit" : ""), "val", "start");
+    });
+  }
+
+  // 4. MTP draft depth: columns, the chosen setting emphasized, others muted.
+  function mtpChart() {
+    const host = document.getElementById("c-mtp");
+    const W = 520, L = 44, R = 12, top = 22, ph = 190, H = top + ph + 52, cw = 24;
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "group", "aria-label": "Decode speed by MTP draft depth" }, host);
+    const max = 50, y = v => top + ph - (v / max) * ph, band = (W - L - R) / MTP.length;
+    for (let v = 0; v <= max; v += 10) {
+      el("line", { x1: L, x2: W - R, y1: y(v), y2: y(v), class: v === 0 ? "base" : "grid" }, svg);
+      text(svg, L - 8, y(v) + 4, String(v), "tick", "end");
+    }
+    text(svg, L - 8, top - 10, "tok/s", "tick", "end");
+    MTP.forEach((d, i) => {
+      const cx = L + band * i + band / 2, best = d.k === "2 ahead";
+      el("path", { d: vbarPath(cx - cw / 2, y(0), y(d.tps), cw), fill: best ? "var(--m27)" : "var(--axis)" }, svg);
+      text(svg, cx, y(d.tps) - 7, d.tps.toFixed(1), "val", "middle");
+      text(svg, cx, top + ph + 18, d.k, "lbl", "middle");
+      text(svg, cx, top + ph + 36, d.acc == null ? "no drafts" : d.acc + "% accepted", "tick", "middle");
+      const hit = el("rect", { x: cx - band / 2 + 4, y: top, width: band - 8, height: ph, class: "hit" }, svg);
+      hover(hit, `<b>MTP ${d.k.toLowerCase()}</b><br>${d.tps.toFixed(1)} tok/s${d.acc == null ? "" : ` · ${d.acc}% of drafts accepted`}`, host);
+    });
+  }
+
+  function repliesTable() {
+    const tb = document.querySelector("#t-replies tbody");
+    PROMPTS.forEach((p, i) => {
+      MODELS.forEach((m, k) => {
+        const r = RUNS[m.id][i], tr = document.createElement("tr");
+        tr.innerHTML = (k === 0 ? `<td rowspan="3"><div lang="ar" dir="rtl"></div><div class="note"></div></td>` : "") +
+          `<td><span class="mname"><span class="key" style="background:${m.color}"></span>${m.name}</span></td>` +
+          `<td><div lang="ar" dir="rtl"></div></td><td class="num">${r[0].toFixed(2)} s</td><td class="num">${r[1].toFixed(2)} s</td><td class="num">${r[2].toFixed(1)}</td>`;
+        const ar = tr.querySelectorAll('[lang="ar"]');
+        if (k === 0) { ar[0].textContent = p[0]; tr.querySelector(".note").textContent = p[1]; ar[1].textContent = r[3]; }
+        else ar[0].textContent = r[3];
+        tb.appendChild(tr);
+      });
+    });
+  }
+
+  sentenceChart(); speedChart(); vramChart(); mtpChart(); repliesTable();
+  document.addEventListener("scroll", hideTip, { passive: true });
+})();
+</script>

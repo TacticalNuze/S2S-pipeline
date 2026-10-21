@@ -1,9 +1,9 @@
 """
 Arabic text-to-speech with Habibi-TTS (https://github.com/SWivid/Habibi-TTS), on CPU.
 
-    uv run habibi_synth.py "السلام عليكم، كيداير؟" -o reply.wav
-    uv run habibi_synth.py --dialect EGY "إزيك عامل إيه؟" -o reply.wav
-    uv run habibi_synth.py --ref-audio me.wav --ref-text "transcript of me.wav" "..."
+    uv run tts/habibi_synth.py "السلام عليكم، كيداير؟" -o reply.wav
+    uv run tts/habibi_synth.py --dialect EGY "إزيك عامل إيه؟" -o reply.wav
+    uv run tts/habibi_synth.py --ref-audio me.wav --ref-text "transcript of me.wav" "..."
 
 Habibi clones the voice of a short reference clip (clipped to 12 s) and needs its exact
 transcript. A reference in the same dialect as the text gives the best results. Without
@@ -13,6 +13,7 @@ transcript. A reference in the same dialect as the text gives the best results. 
 """
 import argparse
 import os
+import sys
 import tempfile
 from importlib.resources import files
 
@@ -23,6 +24,11 @@ import truststore
 # Verify HTTPS with the Windows certificate store, so model downloads work behind a
 # TLS-inspecting corporate proxy (otherwise: SSL CERTIFICATE_VERIFY_FAILED).
 truststore.inject_into_ssl()
+
+# f5_tts prints the Arabic reference text, which crashes on a Windows cp1252 console or pipe.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
 
 SR = 24000     # Habibi (vocos vocoder) output rate
 PCM_SR = 16000  # rate the rest of the pipeline uses (see ttfa_harness.SR)

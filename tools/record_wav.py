@@ -1,12 +1,10 @@
 """
-Record 16 kHz mono int16 WAV files from the microphone, for moulso_asr.py and ttfa_harness.py.
-
-    pip install sounddevice soundfile numpy
+Record 16 kHz mono int16 WAV files from the microphone, for asr/moulsot_asr.py, full-run/habibi_adapter.py and benchmark/ttfa_harness.py.
 
 Usage:
-    python record_wav.py                     # press Enter to stop, saves recordings/rec_<timestamp>.wav
-    python record_wav.py -o hello.wav -s 5   # record exactly 5 seconds
-    python record_wav.py --list-devices      # show microphones, then pick one with -d <index>
+    uv run tools/record_wav.py                     # press Enter to stop, saves recordings/rec_<timestamp>.wav
+    uv run tools/record_wav.py -o hello.wav -s 5   # record exactly 5 seconds
+    uv run tools/record_wav.py --list-devices      # show microphones, then pick one with -d <index>
 """
 import argparse
 import queue

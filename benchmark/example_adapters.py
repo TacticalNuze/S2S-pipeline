@@ -10,7 +10,7 @@ import os
 
 import numpy as np
 
-from ttfa_harness import CHUNK, SR, S2SAdapter
+from benchmark.ttfa_harness import CHUNK, SR, S2SAdapter
 
 
 class LocalModelAdapter(S2SAdapter):
